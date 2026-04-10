@@ -621,7 +621,7 @@ export default function Home() {
             {authorStats.filter((a) => a.count >= 5).length > 0 && (
               <div className="border-t border-border/30 pt-4">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                  Authors
+                  Favorite Authors
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {authorStats.filter((a) => a.count >= 5).map(({ name, count }) => {
