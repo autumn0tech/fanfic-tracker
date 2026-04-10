@@ -41,6 +41,7 @@ import {
   Smartphone,
   Flame,
   Heart,
+  BookText,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -91,6 +92,20 @@ function buildBookmarkletHref(appPageUrl: string): string {
     `window.location.href='${appPageUrl}?import='+encodeURIComponent(JSON.stringify(data));` +
     `})()`;
   return "javascript:" + code;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Formats a raw word count into a compact, readable string.
+ *   0–999        → "873"
+ *   1,000–999,999 → "143k"
+ *   1,000,000+   → "1.2m"
+ */
+function formatWords(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}m`;
+  if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
+  return n.toString();
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -509,18 +524,32 @@ export default function Home() {
                   This Month&apos;s Reading
                 </p>
                 {isLoadingStats ? (
-                  <div className="h-8 w-48 bg-muted animate-pulse rounded mt-2" />
+                  <div className="space-y-2 mt-2">
+                    <div className="h-8 w-48 bg-muted animate-pulse rounded" />
+                    <div className="h-4 w-32 bg-muted animate-pulse rounded" />
+                  </div>
                 ) : (
-                  <p className="font-serif text-2xl text-foreground">
-                    <strong className="text-primary">
-                      {stats?.ficCount || 0}
-                    </strong>{" "}
-                    fics across{" "}
-                    <strong className="text-primary">
-                      {stats?.fandomCount || 0}
-                    </strong>{" "}
-                    fandoms
-                  </p>
+                  <>
+                    <p className="font-serif text-2xl text-foreground">
+                      <strong className="text-primary">
+                        {stats?.ficCount || 0}
+                      </strong>{" "}
+                      fics across{" "}
+                      <strong className="text-primary">
+                        {stats?.fandomCount || 0}
+                      </strong>{" "}
+                      fandoms
+                    </p>
+                    {(stats?.totalWords ?? 0) > 0 && (
+                      <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5">
+                        <BookText className="w-3.5 h-3.5 shrink-0 text-primary/50" />
+                        <strong className="text-foreground font-medium">
+                          {formatWords(stats!.totalWords)}
+                        </strong>{" "}
+                        words read
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
 

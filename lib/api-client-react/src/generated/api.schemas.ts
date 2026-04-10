@@ -70,5 +70,6 @@ export interface UpdateFicBody {
 export interface MonthlyStats {
   ficCount: number;
   fandomCount: number;
+  totalWords: number;
   month: string;
 }

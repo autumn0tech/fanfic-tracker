@@ -124,5 +124,6 @@ export const DeleteFicParams = zod.object({
 export const GetMonthlyStatsResponse = zod.object({
   ficCount: zod.number(),
   fandomCount: zod.number(),
+  totalWords: zod.number(),
   month: zod.string(),
 });

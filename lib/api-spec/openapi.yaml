@@ -301,9 +301,12 @@ components:
           type: integer
         fandomCount:
           type: integer
+        totalWords:
+          type: integer
         month:
           type: string
       required:
         - ficCount
         - fandomCount
+        - totalWords
         - month

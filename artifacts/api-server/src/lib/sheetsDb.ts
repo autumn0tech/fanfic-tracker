@@ -251,8 +251,9 @@ export async function deleteFic(id: string): Promise<boolean> {
 /**
  * Returns reading statistics for the current calendar month.
  *
- * ficCount   — number of fics logged this month
+ * ficCount    — number of fics logged this month
  * fandomCount — number of unique fandoms read this month
+ * totalWords  — sum of wordCount for all fics logged this month
  * month       — the month in "YYYY-MM" format
  *
  * Fandom deduplication:
@@ -264,6 +265,7 @@ export async function deleteFic(id: string): Promise<boolean> {
 export async function getMonthlyStats(): Promise<{
   ficCount: number;
   fandomCount: number;
+  totalWords: number;
   month: string;
 }> {
   const { rows } = await getAllRows();
@@ -287,9 +289,16 @@ export async function getMonthlyStats(): Promise<{
     ),
   );
 
+  // Sum word counts — column G (index 6) is stored as an integer string
+  const totalWords = monthRows.reduce(
+    (sum, r) => sum + (parseInt(r[6] ?? "0", 10) || 0),
+    0,
+  );
+
   return {
     ficCount: monthRows.length,
     fandomCount: fandoms.size,
+    totalWords,
     month: currentMonth,
   };
 }
