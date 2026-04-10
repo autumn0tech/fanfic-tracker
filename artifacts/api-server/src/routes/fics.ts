@@ -7,7 +7,6 @@
  * generated client types.
  *
  * Endpoints:
- *  POST   /fics/scrape      — (legacy) server-side AO3 scrape (often blocked by Cloudflare)
  *  GET    /fics             — list all fics, newest first
  *  POST   /fics             — create a new fic record (called by the bookmarklet redirect)
  *  GET    /fics/:id         — get a single fic by ID
@@ -18,7 +17,6 @@
 
 import { Router, type IRouter } from "express";
 import {
-  ScrapeFicBody,
   GetFicParams,
   UpdateFicParams,
   UpdateFicBody,
@@ -27,10 +25,8 @@ import {
   ListFicsResponse,
   GetFicResponse,
   UpdateFicResponse,
-  ScrapeFicResponse,
   GetMonthlyStatsResponse,
 } from "@workspace/api-zod";
-import { scrapeFic, validateAO3Url } from "../lib/scraper";
 import {
   listFics,
   getFic,
@@ -41,37 +37,6 @@ import {
 } from "../lib/sheetsDb";
 
 const router: IRouter = Router();
-
-// ─── POST /fics/scrape ───────────────────────────────────────────────────────
-// Attempts a server-side scrape of an AO3 work page.
-// NOTE: AO3 uses Cloudflare which frequently blocks server-side HTTP requests.
-// The bookmarklet approach (client-side, POST /fics) is the primary workflow.
-router.post("/fics/scrape", async (req, res): Promise<void> => {
-  const parsed = ScrapeFicBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-
-  const { url } = parsed.data;
-
-  if (!validateAO3Url(url)) {
-    res
-      .status(400)
-      .json({ error: "Only archiveofourown.org work URLs are supported" });
-    return;
-  }
-
-  try {
-    const scraped = await scrapeFic(url);
-    res.json(ScrapeFicResponse.parse(scraped));
-  } catch (err) {
-    req.log.warn({ err }, "AO3 scrape failed");
-    res
-      .status(400)
-      .json({ error: err instanceof Error ? err.message : "Scrape failed" });
-  }
-});
 
 // ─── GET /fics ───────────────────────────────────────────────────────────────
 // Returns the full reading log sorted newest-first.
@@ -157,7 +122,7 @@ router.delete("/fics/:id", async (req, res): Promise<void> => {
 });
 
 // ─── GET /stats/monthly ──────────────────────────────────────────────────────
-// Returns ficCount, fandomCount, and the current month string ("YYYY-MM").
+// Returns ficCount, fandomCount, totalWords, and the current month string ("YYYY-MM").
 // Used by the Home page header stats card.
 router.get("/stats/monthly", async (_req, res): Promise<void> => {
   const stats = await getMonthlyStats();
