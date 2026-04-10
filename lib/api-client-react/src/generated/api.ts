@@ -19,6 +19,8 @@ import type {
 import type {
   CreateFicBody,
   ErrorResponse,
+  FavAuthorBody,
+  FavAuthorsResponse,
   Fic,
   HealthStatus,
   MonthlyStats,
@@ -592,6 +594,251 @@ export const useDeleteFic = <
   TContext
 > => {
   return useMutation(getDeleteFicMutationOptions(options));
+};
+
+/**
+ * @summary List all favourite author names
+ */
+export const getListFavAuthorsUrl = () => {
+  return `/api/favauthors`;
+};
+
+export const listFavAuthors = async (
+  options?: RequestInit,
+): Promise<FavAuthorsResponse> => {
+  return customFetch<FavAuthorsResponse>(getListFavAuthorsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListFavAuthorsQueryKey = () => {
+  return [`/api/favauthors`] as const;
+};
+
+export const getListFavAuthorsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listFavAuthors>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listFavAuthors>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListFavAuthorsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listFavAuthors>>> = ({
+    signal,
+  }) => listFavAuthors({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listFavAuthors>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListFavAuthorsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listFavAuthors>>
+>;
+export type ListFavAuthorsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all favourite author names
+ */
+
+export function useListFavAuthors<
+  TData = Awaited<ReturnType<typeof listFavAuthors>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listFavAuthors>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListFavAuthorsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Add an author to favourites
+ */
+export const getAddFavAuthorUrl = () => {
+  return `/api/favauthors`;
+};
+
+export const addFavAuthor = async (
+  favAuthorBody: FavAuthorBody,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getAddFavAuthorUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(favAuthorBody),
+  });
+};
+
+export const getAddFavAuthorMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addFavAuthor>>,
+    TError,
+    { data: BodyType<FavAuthorBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof addFavAuthor>>,
+  TError,
+  { data: BodyType<FavAuthorBody> },
+  TContext
+> => {
+  const mutationKey = ["addFavAuthor"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof addFavAuthor>>,
+    { data: BodyType<FavAuthorBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return addFavAuthor(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AddFavAuthorMutationResult = NonNullable<
+  Awaited<ReturnType<typeof addFavAuthor>>
+>;
+export type AddFavAuthorMutationBody = BodyType<FavAuthorBody>;
+export type AddFavAuthorMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Add an author to favourites
+ */
+export const useAddFavAuthor = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addFavAuthor>>,
+    TError,
+    { data: BodyType<FavAuthorBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof addFavAuthor>>,
+  TError,
+  { data: BodyType<FavAuthorBody> },
+  TContext
+> => {
+  return useMutation(getAddFavAuthorMutationOptions(options));
+};
+
+/**
+ * @summary Remove an author from favourites
+ */
+export const getRemoveFavAuthorUrl = (author: string) => {
+  return `/api/favauthors/${author}`;
+};
+
+export const removeFavAuthor = async (
+  author: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getRemoveFavAuthorUrl(author), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getRemoveFavAuthorMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeFavAuthor>>,
+    TError,
+    { author: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof removeFavAuthor>>,
+  TError,
+  { author: string },
+  TContext
+> => {
+  const mutationKey = ["removeFavAuthor"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof removeFavAuthor>>,
+    { author: string }
+  > = (props) => {
+    const { author } = props ?? {};
+
+    return removeFavAuthor(author, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RemoveFavAuthorMutationResult = NonNullable<
+  Awaited<ReturnType<typeof removeFavAuthor>>
+>;
+
+export type RemoveFavAuthorMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Remove an author from favourites
+ */
+export const useRemoveFavAuthor = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeFavAuthor>>,
+    TError,
+    { author: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof removeFavAuthor>>,
+  TError,
+  { author: string },
+  TContext
+> => {
+  return useMutation(getRemoveFavAuthorMutationOptions(options));
 };
 
 /**
