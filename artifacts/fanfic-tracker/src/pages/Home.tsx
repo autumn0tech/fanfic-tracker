@@ -42,6 +42,8 @@ import {
   Flame,
   Heart,
   BookText,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -108,6 +110,11 @@ function formatWords(n: number): string {
   return n.toString();
 }
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const PAGE_SIZE = 5;  // fics shown per page
+const MAX_ALL = 100;  // max fics loaded when "See all" is clicked
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Home() {
@@ -122,6 +129,18 @@ export default function Home() {
 
   const [setupTab, setSetupTab] = useState<"desktop" | "mobile">("desktop");
   const [copied, setCopied] = useState(false);
+
+  // ── Pagination ──────────────────────────────────────────────────────────────
+  const [page, setPage] = useState(1);
+  const [showAll, setShowAll] = useState(false);
+
+  // Reset to first page whenever the total number of fics changes
+  // (e.g. after a bookmarklet import adds a new entry at the top).
+  const totalFics = fics?.length ?? 0;
+  useEffect(() => {
+    setPage(1);
+    setShowAll(false);
+  }, [totalFics]);
 
   // ── Favourite authors ───────────────────────────────────────────────────────
   // Stored in localStorage so they persist across page reloads without
@@ -296,6 +315,15 @@ export default function Home() {
         return b.count - a.count;
       });
   }, [fics, favAuthors]);
+
+  // Slice of fics to display based on the current page / show-all mode.
+  const visibleFics = useMemo(() => {
+    if (!fics?.length) return [];
+    if (showAll) return fics.slice(0, MAX_ALL);
+    return fics.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  }, [fics, page, showAll]);
+
+  const totalPages = Math.ceil(totalFics / PAGE_SIZE);
 
   // Highest frequency in the word cloud — used to normalise font/opacity scaling
   const maxFandomCount = fandomCloud[0]?.count ?? 1;
@@ -705,23 +733,79 @@ export default function Home() {
               </p>
             </div>
           ) : (
-            /* Fic list — each card entrance is staggered by 50ms for a cascade effect */
-            <div className="space-y-4" data-testid="fics-list">
-              {fics?.map((fic, i) => (
-                <motion.div
-                  key={fic.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.05, duration: 0.3 }}
-                >
-                  <FicCard
-                    fic={fic}
-                    isFav={favAuthors.has(fic.author)}
-                    onToggleFav={() => toggleFav(fic.author)}
-                  />
-                </motion.div>
-              ))}
-            </div>
+            <>
+              {/* Fic list — each card entrance is staggered by 50ms for a cascade effect */}
+              <div className="space-y-4" data-testid="fics-list">
+                {visibleFics.map((fic, i) => (
+                  <motion.div
+                    key={fic.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.05, duration: 0.3 }}
+                  >
+                    <FicCard
+                      fic={fic}
+                      isFav={favAuthors.has(fic.author)}
+                      onToggleFav={() => toggleFav(fic.author)}
+                    />
+                  </motion.div>
+                ))}
+              </div>
+
+              {/* Pagination controls — hidden when there is only one page */}
+              {totalFics > PAGE_SIZE && (
+                <div className="flex items-center justify-between pt-2">
+                  {/* Prev / page indicator / Next — only in paginated mode */}
+                  {showAll ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">
+                        Showing {visibleFics.length} of {totalFics} fics
+                      </span>
+                      <button
+                        onClick={() => { setShowAll(false); setPage(1); }}
+                        className="text-sm text-primary hover:underline"
+                      >
+                        Back to pages
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        disabled={page === 1}
+                        className="p-1.5 rounded-md border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        aria-label="Previous page"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <span className="text-sm text-muted-foreground tabular-nums">
+                        {page} / {totalPages}
+                      </span>
+                      <button
+                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                        disabled={page === totalPages}
+                        className="p-1.5 rounded-md border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        aria-label="Next page"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* See all button — always visible in paginated mode */}
+                  {!showAll && (
+                    <button
+                      onClick={() => setShowAll(true)}
+                      className="text-sm text-muted-foreground hover:text-foreground hover:underline transition-colors"
+                    >
+                      {totalFics <= MAX_ALL
+                        ? `See all ${totalFics} fics`
+                        : `See all (showing 100 of ${totalFics})`}
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
       </main>
