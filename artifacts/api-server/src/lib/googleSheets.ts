@@ -172,3 +172,30 @@ export async function getOrCreateSpreadsheet(): Promise<string> {
   cachedSpreadsheetId = spreadsheetId;
   return spreadsheetId;
 }
+
+/**
+ * Ensures the "FavAuthors" sheet tab exists in the spreadsheet.
+ * Called lazily — only when the favauthors endpoints are first used.
+ * Safe to call multiple times; does nothing if the tab already exists.
+ */
+export async function ensureFavAuthorsSheet(spreadsheetId: string): Promise<void> {
+  const sheets = await getUncachableGoogleSheetClient();
+  const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
+  const exists = spreadsheet.data.sheets?.some(
+    (s) => s.properties?.title === "FavAuthors",
+  );
+  if (exists) return;
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          addSheet: {
+            properties: { title: "FavAuthors" },
+          },
+        },
+      ],
+    },
+  });
+}
