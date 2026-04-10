@@ -44,9 +44,16 @@ Thumbs.db
 .cursor/rules/nx-rules.mdc
 .github/instructions/nx.instructions.md
 
-# Replit
+# Replit-specific files (not needed outside Replit)
+.replit
+.replitignore
+replit.md
+.replit-artifact/
 .cache/
 .local/
+artifacts/mockup-sandbox/
+lib/replit-auth-web/
+lib/db/
 
 # Sensitive config — contains Google Sheets spreadsheet ID
-artifacts/api-server/data/sheet-id.txt
+artifacts/api-server/data/

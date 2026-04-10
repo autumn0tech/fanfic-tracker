@@ -1,3 +1,25 @@
+/**
+ * FicDetail.tsx — individual fic page
+ *
+ * Displays the full metadata for a single fic and lets the user:
+ *  - Rate it 1–5 stars
+ *  - Write a personal journal note
+ *  - Delete it from the log entirely
+ *
+ * The fic ID comes from the URL parameter /fics/:id (via wouter).
+ *
+ * Edit state:
+ *  The page starts in read mode.  Clicking "Edit Notes" or touching a star
+ *  enters edit mode.  "Save Journal" commits the changes to the API; "Cancel"
+ *  discards them.  After a successful save the query cache is updated optimistically
+ *  so the page reflects the new values immediately without a full refetch.
+ *
+ * Delete flow:
+ *  Clicking "Remove from Log" opens a confirmation AlertDialog to prevent
+ *  accidental deletions.  On confirm the fic is deleted via the API and the
+ *  user is navigated back to the home page.
+ */
+
 import React, { useState, useEffect, useRef } from "react";
 import { useRoute, useLocation, Link } from "wouter";
 import { 
@@ -29,12 +51,14 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function FicDetail() {
+  // Extract the fic ID from the URL — wouter returns null params when no match
   const [, params] = useRoute("/fics/:id");
   const id = params?.id || "";
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Fetch the fic; skip the query entirely if we somehow have no ID
   const { data: fic, isLoading, isError } = useGetFic(id, { 
     query: { enabled: !!id, queryKey: getGetFicQueryKey(id) } 
   });
@@ -42,10 +66,14 @@ export default function FicDetail() {
   const updateFic = useUpdateFic();
   const deleteFic = useDeleteFic();
 
+  // Local edit state — mirrors the fic's persisted values initially
   const [rating, setRating] = useState<number | null>(null);
   const [note, setNote] = useState<string>("");
   const [isEditing, setIsEditing] = useState(false);
-  
+
+  // Track which fic ID we've already initialised state for.
+  // Without this guard, the state would reset every time the fic data re-renders
+  // (e.g. after a successful save triggers a cache update).
   const initializedForId = useRef<string | null>(null);
 
   useEffect(() => {
@@ -56,6 +84,11 @@ export default function FicDetail() {
     }
   }, [fic, id]);
 
+  /**
+   * Persist the current rating and note to the API.
+   * On success: update the TanStack Query cache directly (optimistic) so the
+   * UI reflects the change immediately, then exit edit mode.
+   */
   const handleSave = async () => {
     if (!id) return;
     
@@ -64,10 +97,11 @@ export default function FicDetail() {
         id,
         data: {
           userRating: rating,
-          userNote: note.trim() || null
+          userNote: note.trim() || null   // treat blank string as no note
         }
       });
       
+      // Patch the cached fic object rather than triggering a full refetch
       queryClient.setQueryData(getGetFicQueryKey(id), (old: any) => 
         old ? { ...old, userRating: rating, userNote: note.trim() || null } : old
       );
@@ -83,11 +117,16 @@ export default function FicDetail() {
     }
   };
 
+  /**
+   * Delete the fic via the API, invalidate the list cache so the home page
+   * no longer shows it, then navigate back to the home page.
+   */
   const handleDelete = async () => {
     if (!id) return;
     try {
       await deleteFic.mutateAsync({ id });
       toast({ title: "Fic deleted from log" });
+      // Invalidate the list so the home page re-fetches without this fic
       queryClient.invalidateQueries({ queryKey: getListFicsQueryKey() });
       setLocation("/");
     } catch (error) {
@@ -98,6 +137,7 @@ export default function FicDetail() {
     }
   };
 
+  // ── Loading skeleton ──────────────────────────────────────────────────────
   if (isLoading) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-8">
@@ -112,6 +152,7 @@ export default function FicDetail() {
     );
   }
 
+  // ── Not found / error ─────────────────────────────────────────────────────
   if (isError || !fic) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-16 text-center">
@@ -124,6 +165,8 @@ export default function FicDetail() {
   return (
     <div className="min-h-[100dvh] pb-24 bg-background">
       <div className="max-w-3xl mx-auto px-4 py-8">
+
+        {/* Back navigation */}
         <Link href="/">
           <Button variant="ghost" size="sm" className="mb-6 -ml-3 text-muted-foreground hover:text-foreground">
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -131,7 +174,7 @@ export default function FicDetail() {
           </Button>
         </Link>
 
-        {/* Fic Header */}
+        {/* Fic header — title, author, link to AO3 */}
         <div className="mb-10">
           <h1 className="font-serif text-3xl sm:text-4xl font-bold text-foreground mb-3 leading-tight">
             {fic.title}
@@ -152,7 +195,7 @@ export default function FicDetail() {
           </div>
         </div>
 
-        {/* Metadata Grid */}
+        {/* Metadata grid — fandom, ship, word count, date saved */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10">
           <div className="bg-card border border-border/50 rounded-xl p-4 flex flex-col gap-1">
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
@@ -186,7 +229,7 @@ export default function FicDetail() {
           </div>
         </div>
 
-        {/* Tags */}
+        {/* Full tag list */}
         {fic.tags && fic.tags.length > 0 && (
           <div className="mb-12">
             <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">Tags</h3>
@@ -202,10 +245,11 @@ export default function FicDetail() {
 
         <hr className="border-border/60 my-10" />
 
-        {/* Personal Notes Section */}
+        {/* Personal journal section — rating + free-text note */}
         <div className="bg-card border border-border rounded-2xl p-6 sm:p-8 shadow-sm">
           <div className="flex items-center justify-between mb-6">
             <h2 className="font-serif text-2xl font-semibold text-foreground">Personal Journal</h2>
+            {/* Only show "Edit Notes" button when not already editing */}
             {!isEditing && (
               <Button 
                 variant="outline" 
@@ -219,6 +263,7 @@ export default function FicDetail() {
           </div>
 
           <div className="space-y-8">
+            {/* Star rating — touching a star auto-enters edit mode */}
             <div>
               <label className="block text-sm font-medium text-muted-foreground mb-3">Your Rating</label>
               <StarRating 
@@ -229,6 +274,7 @@ export default function FicDetail() {
               />
             </div>
 
+            {/* Free-text note — textarea in edit mode, plain text in read mode */}
             <div>
               <label className="block text-sm font-medium text-muted-foreground mb-3">Your Thoughts</label>
               {isEditing ? (
@@ -246,11 +292,13 @@ export default function FicDetail() {
               )}
             </div>
 
+            {/* Save / Cancel actions — only visible in edit mode */}
             {isEditing && (
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-border/50">
                 <Button 
                   variant="ghost" 
                   onClick={() => {
+                    // Discard local changes and restore from the last fetched fic
                     setRating(fic.userRating ?? null);
                     setNote(fic.userNote ?? "");
                     setIsEditing(false);
@@ -273,7 +321,7 @@ export default function FicDetail() {
           </div>
         </div>
 
-        {/* Danger Zone */}
+        {/* Delete section — behind a confirmation dialog */}
         <div className="mt-16 pt-8 border-t border-border/40 flex justify-center">
           <AlertDialog>
             <AlertDialogTrigger asChild>
@@ -302,6 +350,7 @@ export default function FicDetail() {
             </AlertDialogContent>
           </AlertDialog>
         </div>
+
       </div>
     </div>
   );

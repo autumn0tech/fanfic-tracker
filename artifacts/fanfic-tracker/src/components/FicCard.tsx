@@ -1,3 +1,19 @@
+/**
+ * FicCard.tsx — card component shown in the reading log list
+ *
+ * Each card is a clickable link to the fic's detail page.  It displays:
+ *  - Title, author, fandom, ship, word count
+ *  - Up to 5 tags (with "+N more" if there are extra)
+ *  - Star rating badge (if the user has rated the fic)
+ *  - A small heart button next to the author name to toggle that author as a
+ *    favourite — the click is caught before the link fires so it doesn't navigate
+ *
+ * Props:
+ *  fic          — the fic data object from the API
+ *  isFav        — whether the fic's author is currently in the favourites set
+ *  onToggleFav  — callback that adds/removes the author from favourites
+ */
+
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { BookOpen, Calendar, Tag as TagIcon, Users, Heart } from "lucide-react";
@@ -13,9 +29,11 @@ interface FicCardProps {
 
 export function FicCard({ fic, isFav, onToggleFav }: FicCardProps) {
   return (
+    // The whole card is a wouter Link — clicking anywhere navigates to the detail page.
     <Link href={`/fics/${fic.id}`} className="block group" data-testid={`fic-card-${fic.id}`}>
       <div className="bg-card border border-border/50 hover:border-primary/30 rounded-xl p-5 sm:p-6 transition-all duration-300 shadow-sm hover:shadow-md hover:-translate-y-0.5">
         
+        {/* Title row + rating badge */}
         <div className="flex items-start justify-between gap-4 mb-3">
           <div>
             <h3 className="font-serif text-xl sm:text-2xl font-bold text-foreground group-hover:text-primary transition-colors line-clamp-2">
@@ -23,6 +41,10 @@ export function FicCard({ fic, isFav, onToggleFav }: FicCardProps) {
             </h3>
             <div className="flex items-center gap-2 mt-1">
               <p className="text-muted-foreground font-medium">by {fic.author}</p>
+
+              {/* Heart button — only rendered when the parent passes onToggleFav.
+                  e.preventDefault() stops the Link navigation.
+                  e.stopPropagation() prevents the click bubbling up to the Link. */}
               {onToggleFav && (
                 <button
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleFav(); }}
@@ -34,6 +56,8 @@ export function FicCard({ fic, isFav, onToggleFav }: FicCardProps) {
               )}
             </div>
           </div>
+
+          {/* Star rating — shown read-only on the card if the user has rated it */}
           {fic.userRating && (
             <div className="shrink-0 bg-accent/50 rounded-full px-2 py-1">
               <StarRating rating={fic.userRating} readOnly size={16} className="gap-0.5" />
@@ -41,6 +65,7 @@ export function FicCard({ fic, isFav, onToggleFav }: FicCardProps) {
           )}
         </div>
 
+        {/* Fandom / ship / word count row */}
         <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-muted-foreground mb-4">
           <div className="flex items-center gap-1.5" data-testid={`fic-fandom-${fic.id}`}>
             <BookOpen className="w-4 h-4 text-primary/70" />
@@ -55,12 +80,14 @@ export function FicCard({ fic, isFav, onToggleFav }: FicCardProps) {
           )}
 
           <div className="flex items-center gap-1.5">
+            {/* Intl.NumberFormat adds locale-appropriate thousands separators */}
             <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded text-foreground/70">
               {new Intl.NumberFormat('en-US').format(fic.wordCount)} words
             </span>
           </div>
         </div>
 
+        {/* Tags — show at most 5 to keep cards compact */}
         {fic.tags && fic.tags.length > 0 && (
           <div className="flex items-center gap-2 flex-wrap mb-4">
             <TagIcon className="w-3.5 h-3.5 text-muted-foreground/70" />
@@ -77,6 +104,7 @@ export function FicCard({ fic, isFav, onToggleFav }: FicCardProps) {
           </div>
         )}
 
+        {/* Footer — save date on the left, personal note preview on the right */}
         <div className="flex items-center justify-between mt-4 pt-4 border-t border-border/30">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Calendar className="w-3.5 h-3.5" />

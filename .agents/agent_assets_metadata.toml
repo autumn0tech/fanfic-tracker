@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "3Vv07m-Zv7lXZHqq9mAvE"
+uri = "file://TECH.md"
+type = "text"
+title = "Fanfic Tracker — Technical Documentation"

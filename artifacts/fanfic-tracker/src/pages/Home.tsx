@@ -1,3 +1,23 @@
+/**
+ * Home.tsx — main reading log page
+ *
+ * Responsibilities:
+ *  1. Detect the bookmarklet redirect (?import=<json>) on mount and save the fic.
+ *  2. Render the stats header card:
+ *       - Monthly fic/fandom counts
+ *       - Reading streak (consecutive days with at least one fic logged)
+ *       - Tag word cloud (top 10 most-frequent tags this month)
+ *       - Favourite authors section (authors with 5+ fics; heart-toggle chips)
+ *  3. Render the full fic list as FicCard components, with staggered entrance animation.
+ *  4. Provide the "Setup bookmark" dialog explaining how to install the bookmarklet
+ *     on desktop (drag-and-drop) and mobile (copy-paste URL).
+ *
+ * State owned here:
+ *  favAuthors  — Set<string> persisted to localStorage; passed to FicCard as isFav/onToggleFav
+ *  setupTab    — "desktop" | "mobile" controls which instructions are shown in the dialog
+ *  copied      — short-lived boolean to show a "Copied!" checkmark after clipboard write
+ */
+
 import { useMemo, useEffect, useRef, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
@@ -31,25 +51,49 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
+// ─── Bookmarklet builder ──────────────────────────────────────────────────────
+
+/**
+ * Builds the full `javascript:` URL that becomes the bookmarklet.
+ *
+ * The generated code runs entirely in the AO3 page context (no network calls),
+ * reads metadata from the DOM, and redirects the browser to:
+ *   <appPageUrl>?import=<url-encoded-json>
+ *
+ * The app then picks up that query parameter on mount and saves the fic.
+ *
+ * Minification note: the code is written as a single concatenated string so the
+ * resulting `javascript:` URL contains no newlines (some browsers reject multi-line
+ * javascript: bookmarks).
+ */
 function buildBookmarkletHref(appPageUrl: string): string {
   const code =
     `(function(){` +
+    // Guard: only run on AO3 work pages
     `var loc=window.location.href;` +
     `if(loc.indexOf('archiveofourown.org/works/')===-1){alert('Please open an AO3 work page first, then click this bookmark.');return;}` +
+    // Guard: ensure the metadata elements exist (won't be present on chapter pages)
     `var t=document.querySelector('h2.title.heading');` +
     `if(!t){alert('Could not read fic metadata. Make sure you are on the main work page, not inside a chapter.');return;}` +
+    // Scrape metadata from the AO3 work page DOM
     `var au=document.querySelector('[rel=author]')||document.querySelector('.byline a');` +
     `var fd=[].slice.call(document.querySelectorAll('dd.fandom.tags a.tag')).map(function(el){return el.textContent.trim();});` +
     `var sh=[].slice.call(document.querySelectorAll('dd.relationship.tags a.tag')).map(function(el){return el.textContent.trim();});` +
     `var wc=document.querySelector('dd.words');` +
     `var tg=[].slice.call(document.querySelectorAll('dd.freeform.tags a.tag')).map(function(el){return el.textContent.trim();});` +
+    // Normalise URL: strip query string, hash, and /chapters/... so multi-chapter
+    // works always store the canonical work URL
     `var url=loc.split('?')[0].split('#')[0];` +
     `var ci=url.indexOf('/chapters/');if(ci!==-1)url=url.slice(0,ci);` +
+    // Build the data payload — fandoms joined as comma-separated string
     `var data={url:url,title:t.textContent.trim(),author:au?au.textContent.trim():'Anonymous',fandom:fd.join(', ')||'Unknown',ship:sh.length?sh.join(', '):null,wordCount:wc?(parseInt(wc.textContent.trim().replace(/,/g,''),10)||0):0,tags:tg,userRating:null,userNote:null};` +
+    // Redirect to the app with the JSON payload in the query string
     `window.location.href='${appPageUrl}?import='+encodeURIComponent(JSON.stringify(data));` +
     `})()`;
   return "javascript:" + code;
 }
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Home() {
   const { data: fics, isLoading: isLoadingFics } = useListFics();
@@ -57,11 +101,16 @@ export default function Home() {
   const createFic = useCreateFic();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  // Prevents the import handler from running twice in React StrictMode
   const importHandled = useRef(false);
+
   const [setupTab, setSetupTab] = useState<"desktop" | "mobile">("desktop");
   const [copied, setCopied] = useState(false);
 
-  // Favourite authors stored in localStorage (no backend needed)
+  // ── Favourite authors ───────────────────────────────────────────────────────
+  // Stored in localStorage so they persist across page reloads without
+  // needing a backend change.  Initialised lazily from localStorage.
   const [favAuthors, setFavAuthors] = useState<Set<string>>(() => {
     try {
       const stored = localStorage.getItem("favAuthors");
@@ -71,6 +120,7 @@ export default function Home() {
     }
   });
 
+  /** Toggles the given author in the favourite set and syncs to localStorage. */
   function toggleFav(author: string) {
     setFavAuthors((prev) => {
       const next = new Set(prev);
@@ -81,13 +131,19 @@ export default function Home() {
     });
   }
 
+  // ── Bookmarklet ─────────────────────────────────────────────────────────────
+
+  // Compute the bookmarklet href once (depends on the current page origin/path).
+  // Trailing slash is stripped to avoid double-slash issues on some hosts.
   const bookmarkletHref = useMemo(() => {
     const base =
       window.location.origin + window.location.pathname.replace(/\/$/, "");
     return buildBookmarkletHref(base);
   }, []);
 
-  // React blocks javascript: hrefs — set the attribute directly on the DOM node.
+  // React sanitises `javascript:` hrefs set via JSX props (as an XSS safeguard).
+  // Work-around: use a callback ref to call setAttribute() directly on the DOM node
+  // after it mounts, bypassing React's sanitisation for this explicitly-built value.
   const bookmarkletAnchorRef = useCallback(
     (node: HTMLAnchorElement | null) => {
       if (node) node.setAttribute("href", bookmarkletHref);
@@ -95,13 +151,18 @@ export default function Home() {
     [bookmarkletHref],
   );
 
-  // Detect ?import=<json> from the bookmarklet redirect and save the fic.
+  // ── Bookmarklet import handler ──────────────────────────────────────────────
+  // When the bookmarklet redirects the browser back to the app it appends
+  // ?import=<url-encoded-json> to the URL.  This effect detects that parameter,
+  // POSTs the fic to the API, then removes the parameter from the URL so the
+  // user's back-button history stays clean.
   useEffect(() => {
     if (importHandled.current) return;
     const params = new URLSearchParams(window.location.search);
     const raw = params.get("import");
     if (!raw) return;
     importHandled.current = true;
+    // Remove the ?import=... parameter without adding a new history entry
     window.history.replaceState({}, "", window.location.pathname);
 
     let data: Record<string, unknown>;
@@ -118,6 +179,7 @@ export default function Home() {
       {
         onSuccess: (fic: { title: string }) => {
           toast({ title: "Fic saved to your log", description: fic.title });
+          // Invalidate both the list and the stats so they reload with the new fic
           queryClient.invalidateQueries({ queryKey: getListFicsQueryKey() });
           queryClient.invalidateQueries({
             queryKey: getGetMonthlyStatsQueryKey(),
@@ -134,7 +196,14 @@ export default function Home() {
     );
   }, []);
 
-  // Tag word cloud — current month only, aggregated from all fic tags, sorted by frequency.
+  // ── Derived data (memoised) ─────────────────────────────────────────────────
+
+  /**
+   * Tag word cloud — current month's fics only.
+   * Aggregates all freeform tags, filters to those appearing more than once
+   * (single-use tags add noise), sorts by frequency desc, and takes the top 10.
+   * Font size and opacity are scaled by frequency in the render section.
+   */
   const fandomCloud = useMemo(() => {
     if (!fics?.length) return [] as { name: string; count: number }[];
     const now = new Date();
@@ -148,14 +217,24 @@ export default function Home() {
         });
       });
     return Object.entries(freq)
-      .filter(([, count]) => count > 1)
+      .filter(([, count]) => count > 1)   // exclude tags that only appear once
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
       .map(([name, count]) => ({ name, count }));
   }, [fics]);
 
-  // Reading streak — consecutive calendar days (all-time) with at least one fic logged.
-  // Streak stays alive if today or yesterday has an entry.
+  /**
+   * Reading streak — all-time consecutive days with at least one fic logged.
+   *
+   * Algorithm:
+   *  1. Build a Set of all unique dates (YYYY-MM-DD) from the reading log.
+   *  2. If neither today nor yesterday is in the set, the streak is 0 (broken).
+   *  3. Otherwise, walk backwards from whichever of today/yesterday has an entry,
+   *     counting each day that appears in the set, until a gap is found.
+   *
+   * The "today or yesterday" grace period means logging before midnight and
+   * after midnight on the same real day doesn't break the streak.
+   */
   const streak = useMemo(() => {
     if (!fics?.length) return 0;
     const dates = new Set(
@@ -166,22 +245,26 @@ export default function Home() {
       .toISOString()
       .slice(0, 10);
 
-    // If neither today nor yesterday has a log, streak is broken.
     if (!dates.has(todayStr) && !dates.has(yesterdayStr)) return 0;
 
-    // Start counting from whichever of today/yesterday has an entry.
+    // Start counting from the most recent logged day (today or yesterday)
     let cursor = new Date(
       (dates.has(todayStr) ? todayStr : yesterdayStr) + "T12:00:00Z",
     );
     let count = 0;
     while (dates.has(cursor.toISOString().slice(0, 10))) {
       count++;
-      cursor = new Date(cursor.getTime() - 86_400_000);
+      cursor = new Date(cursor.getTime() - 86_400_000); // step back one day
     }
     return count;
   }, [fics]);
 
-  // Authors derived from log, sorted favourites-first then by fic count.
+  /**
+   * Author stats — all authors derived from the full fic list.
+   * Sorted so favourited authors appear first, then by fic count descending.
+   * The header only renders authors with 5+ fics; this memo computes the
+   * full sorted list so the sort order is consistent if the threshold changes.
+   */
   const authorStats = useMemo(() => {
     if (!fics?.length) return [] as { name: string; count: number }[];
     const freq: Record<string, number> = {};
@@ -193,13 +276,16 @@ export default function Home() {
       .sort((a, b) => {
         const aFav = favAuthors.has(a.name);
         const bFav = favAuthors.has(b.name);
+        // Favourites bubble to the top regardless of count
         if (aFav !== bFav) return aFav ? -1 : 1;
         return b.count - a.count;
       });
   }, [fics, favAuthors]);
 
+  // Highest frequency in the word cloud — used to normalise font/opacity scaling
   const maxFandomCount = fandomCloud[0]?.count ?? 1;
 
+  /** Copies the raw bookmarklet href to the clipboard (mobile setup flow). */
   function copyBookmarklet() {
     navigator.clipboard.writeText(bookmarkletHref).then(() => {
       setCopied(true);
@@ -207,12 +293,16 @@ export default function Home() {
     });
   }
 
+  // ── Render ──────────────────────────────────────────────────────────────────
+
   return (
     <div className="min-h-[100dvh] pb-24">
-      {/* Header */}
+
+      {/* ── Header ──────────────────────────────────────────────────────────── */}
       <header className="bg-card border-b border-border/50 py-10 px-4 mb-8">
         <div className="max-w-3xl mx-auto">
-          {/* Title row */}
+
+          {/* Title row + Setup bookmark button */}
           <div className="flex items-center justify-between gap-3 mb-6">
             <div className="flex items-center gap-3">
               <div className="p-2.5 bg-primary/10 rounded-xl text-primary">
@@ -223,7 +313,7 @@ export default function Home() {
               </h1>
             </div>
 
-            {/* Setup modal trigger */}
+            {/* Bookmarklet setup dialog */}
             <Dialog>
               <DialogTrigger asChild>
                 <button
@@ -247,6 +337,7 @@ export default function Home() {
                   One tap on any AO3 page saves it to your log automatically.
                 </p>
 
+                {/* Desktop / Mobile tab switcher */}
                 <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
                   <button
                     onClick={() => setSetupTab("desktop")}
@@ -272,6 +363,7 @@ export default function Home() {
                   </button>
                 </div>
 
+                {/* Desktop instructions: drag bookmarklet to bookmarks bar */}
                 {setupTab === "desktop" ? (
                   <div className="space-y-5">
                     <ol className="space-y-3 text-sm">
@@ -312,6 +404,12 @@ export default function Home() {
                         </span>
                       </li>
                     </ol>
+
+                    {/* Draggable bookmarklet anchor.
+                        The href is set via the callback ref (not JSX) because React
+                        strips javascript: hrefs as an XSS safeguard.
+                        onClick shows an alert to prevent accidental navigation when
+                        the user clicks instead of drags. */}
                     <div className="flex flex-wrap items-center gap-3 p-4 bg-muted/50 rounded-xl border border-dashed border-primary/40">
                       <GripHorizontal className="w-4 h-4 text-muted-foreground shrink-0" />
                       <a
@@ -336,6 +434,7 @@ export default function Home() {
                     </div>
                   </div>
                 ) : (
+                  /* Mobile instructions: copy the javascript: URL and paste into a bookmark */
                   <div className="space-y-5">
                     <ol className="space-y-3 text-sm">
                       <li className="flex items-start gap-3">
@@ -399,8 +498,10 @@ export default function Home() {
             </Dialog>
           </div>
 
-          {/* Stats bar */}
+          {/* ── Stats card ──────────────────────────────────────────────────── */}
           <div className="bg-background rounded-2xl p-6 border border-border/40 shadow-sm">
+
+            {/* Monthly summary row */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 justify-between mb-5">
               <div>
                 <p className="text-muted-foreground font-medium text-sm mb-1 flex items-center gap-1.5">
@@ -424,7 +525,7 @@ export default function Home() {
               </div>
 
               <div className="flex items-center gap-4 shrink-0">
-                {/* Streak counter */}
+                {/* Reading streak badge — hidden when streak is 0 */}
                 {!isLoadingFics && streak > 0 && (
                   <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-50 dark:bg-orange-950/30 border border-orange-200/60 dark:border-orange-800/40">
                     <Flame className="w-4 h-4 text-orange-500" />
@@ -436,6 +537,7 @@ export default function Home() {
                     </span>
                   </div>
                 )}
+                {/* Current month label — parsed from the stats response or derived from Date() */}
                 <div className="text-sm font-medium text-muted-foreground uppercase tracking-wider hidden sm:block">
                   {stats?.month
                     ? new Date(stats.month + "-02").toLocaleString("default", {
@@ -450,7 +552,7 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Fandom word cloud */}
+            {/* Tag word cloud — only shown when there are qualifying tags */}
             {fandomCloud.length > 0 && (
               <div className="border-t border-border/30 pt-4">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
@@ -458,12 +560,14 @@ export default function Home() {
                 </p>
                 <div className="flex flex-wrap gap-x-3 gap-y-2 items-baseline">
                   {fandomCloud.map(({ name, count }) => {
-                    // Scale font size between 0.78rem and 1.45rem based on frequency
+                    // Normalise count to 0–1 range so all tags scale proportionally.
+                    // ratio = 0 for the least frequent, 1 for the most frequent.
                     const ratio = maxFandomCount > 1
                       ? (count - 1) / (maxFandomCount - 1)
                       : 1;
+                    // Font size: 0.78rem (min) → 1.45rem (max)
                     const size = 0.78 + ratio * 0.67;
-                    // Scale opacity between 0.55 and 1
+                    // Opacity: 0.55 (min) → 1.0 (max)
                     const opacity = 0.55 + ratio * 0.45;
                     return (
                       <span
@@ -483,7 +587,8 @@ export default function Home() {
                 </div>
               </div>
             )}
-            {/* Authors — only those with 5+ fics logged */}
+
+            {/* Favourite authors — only authors with 5+ fics logged */}
             {authorStats.filter((a) => a.count >= 5).length > 0 && (
               <div className="border-t border-border/30 pt-4">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
@@ -493,6 +598,8 @@ export default function Home() {
                   {authorStats.filter((a) => a.count >= 5).map(({ name, count }) => {
                     const isFav = favAuthors.has(name);
                     return (
+                      // Clicking toggles the author's favourite status.
+                      // Filled style = favourited; outline style = not favourited.
                       <button
                         key={name}
                         onClick={() => toggleFav(name)}
@@ -518,6 +625,8 @@ export default function Home() {
                 </div>
               </div>
             )}
+
+            {/* Skeleton placeholder shown while fics are loading */}
             {isLoadingFics && (
               <div className="border-t border-border/30 pt-4">
                 <div className="flex gap-3 flex-wrap">
@@ -532,8 +641,8 @@ export default function Home() {
         </div>
       </header>
 
+      {/* ── Fic List ─────────────────────────────────────────────────────────── */}
       <main className="max-w-3xl mx-auto px-4">
-        {/* Fics List */}
         <div className="space-y-6">
           <div className="flex items-center justify-between border-b border-border/40 pb-4">
             <h2 className="font-serif text-2xl font-semibold text-foreground">
@@ -544,6 +653,7 @@ export default function Home() {
             </span>
           </div>
 
+          {/* Loading skeleton — three placeholder cards */}
           {isLoadingFics ? (
             <div className="space-y-4">
               {[1, 2, 3].map((i) => (
@@ -559,6 +669,7 @@ export default function Home() {
               ))}
             </div>
           ) : fics?.length === 0 ? (
+            /* Empty state — shown when the log has no entries yet */
             <div
               className="text-center py-20 bg-card rounded-2xl border border-border/50 border-dashed"
               data-testid="empty-state"
@@ -576,6 +687,7 @@ export default function Home() {
               </p>
             </div>
           ) : (
+            /* Fic list — each card entrance is staggered by 50ms for a cascade effect */
             <div className="space-y-4" data-testid="fics-list">
               {fics?.map((fic, i) => (
                 <motion.div
