@@ -25,6 +25,7 @@ import crypto from "crypto";
 import {
   getUncachableGoogleSheetClient,
   getOrCreateSpreadsheet,
+  ensureFavAuthorsSheet,
 } from "./googleSheets";
 
 // Name of the sheet tab inside the spreadsheet
@@ -301,4 +302,94 @@ export async function getMonthlyStats(): Promise<{
     totalWords,
     month: currentMonth,
   };
+}
+
+// ─── Favourite Authors ────────────────────────────────────────────────────────
+// Stored in a separate "FavAuthors" sheet tab — one author name per row (column A).
+// The tab is created lazily on first access.
+
+const FAV_SHEET = "FavAuthors";
+
+/** Returns all favourite author names as a sorted string array. */
+export async function listFavAuthors(): Promise<string[]> {
+  const spreadsheetId = await getOrCreateSpreadsheet();
+  await ensureFavAuthorsSheet(spreadsheetId);
+  const sheets = await getUncachableGoogleSheetClient();
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${FAV_SHEET}!A1:A`,
+  });
+
+  const rows = (res.data.values as string[][] | null) ?? [];
+  return rows
+    .map((r) => r[0]?.trim())
+    .filter(Boolean)
+    .sort() as string[];
+}
+
+/**
+ * Adds an author name to the FavAuthors sheet.
+ * Does nothing if the author is already present (idempotent).
+ */
+export async function addFavAuthor(author: string): Promise<void> {
+  const spreadsheetId = await getOrCreateSpreadsheet();
+  await ensureFavAuthorsSheet(spreadsheetId);
+
+  const existing = await listFavAuthors();
+  if (existing.includes(author)) return;
+
+  const sheets = await getUncachableGoogleSheetClient();
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range: `${FAV_SHEET}!A1:A`,
+    valueInputOption: "RAW",
+    requestBody: { values: [[author]] },
+  });
+}
+
+/**
+ * Removes an author name from the FavAuthors sheet.
+ * Returns true if removed, false if the author wasn't in the list.
+ */
+export async function removeFavAuthor(author: string): Promise<boolean> {
+  const spreadsheetId = await getOrCreateSpreadsheet();
+  await ensureFavAuthorsSheet(spreadsheetId);
+
+  const sheets = await getUncachableGoogleSheetClient();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${FAV_SHEET}!A1:A`,
+  });
+
+  const rows = (res.data.values as string[][] | null) ?? [];
+  const rowIndex = rows.findIndex((r) => r[0]?.trim() === author);
+  if (rowIndex === -1) return false;
+
+  // Get the internal sheet ID for batchUpdate
+  const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
+  const sheet = spreadsheet.data.sheets?.find(
+    (s) => s.properties?.title === FAV_SHEET,
+  );
+  const sheetId = sheet?.properties?.sheetId ?? 0;
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          deleteDimension: {
+            range: {
+              sheetId,
+              dimension: "ROWS",
+              startIndex: rowIndex,
+              endIndex: rowIndex + 1,
+            },
+          },
+        },
+      ],
+    },
+  });
+
+  return true;
 }
