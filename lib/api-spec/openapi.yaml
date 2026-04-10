@@ -152,6 +152,53 @@ paths:
         "204":
           description: Deleted
 
+  /favauthors:
+    get:
+      operationId: listFavAuthors
+      tags: [fics]
+      summary: List all favourite author names
+      responses:
+        "200":
+          description: Array of author name strings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FavAuthorsResponse"
+    post:
+      operationId: addFavAuthor
+      tags: [fics]
+      summary: Add an author to favourites
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FavAuthorBody"
+      responses:
+        "201":
+          description: Author added (or was already present)
+
+  /favauthors/{author}:
+    delete:
+      operationId: removeFavAuthor
+      tags: [fics]
+      summary: Remove an author from favourites
+      parameters:
+        - name: author
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Removed
+        "404":
+          description: Author not in favourites
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /stats/monthly:
     get:
       operationId: getMonthlyStats
@@ -293,6 +340,19 @@ components:
           type: ["integer", "null"]
         userNote:
           type: ["string", "null"]
+
+    FavAuthorsResponse:
+      type: array
+      items:
+        type: string
+
+    FavAuthorBody:
+      type: object
+      properties:
+        author:
+          type: string
+      required:
+        - author
 
     MonthlyStats:
       type: object
