@@ -1,0 +1,309 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Fanfic Tracker API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: fics
+    description: Fanfic operations
+  - name: stats
+    description: Statistics operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /fics/scrape:
+    post:
+      operationId: scrapeFic
+      tags: [fics]
+      summary: Scrape AO3 fic metadata from URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScrapeFicBody"
+      responses:
+        "200":
+          description: Scraped fic metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScrapedFic"
+        "400":
+          description: Invalid URL or scrape failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /fics:
+    get:
+      operationId: listFics
+      tags: [fics]
+      summary: List all logged fics sorted by date added descending
+      responses:
+        "200":
+          description: List of fics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Fic"
+    post:
+      operationId: createFic
+      tags: [fics]
+      summary: Log a new fic
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFicBody"
+      responses:
+        "201":
+          description: Created fic
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fic"
+
+  /fics/{id}:
+    get:
+      operationId: getFic
+      tags: [fics]
+      summary: Get a single fic record
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Fic record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fic"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateFic
+      tags: [fics]
+      summary: Update fic rating and note
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFicBody"
+      responses:
+        "200":
+          description: Updated fic
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fic"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteFic
+      tags: [fics]
+      summary: Delete a fic record
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /stats/monthly:
+    get:
+      operationId: getMonthlyStats
+      tags: [stats]
+      summary: Get fic count and fandom count for the current month
+      responses:
+        "200":
+          description: Monthly stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonthlyStats"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    ScrapeFicBody:
+      type: object
+      properties:
+        url:
+          type: string
+      required:
+        - url
+
+    ScrapedFic:
+      type: object
+      properties:
+        url:
+          type: string
+        title:
+          type: string
+        author:
+          type: string
+        fandom:
+          type: string
+        ship:
+          type: ["string", "null"]
+        wordCount:
+          type: integer
+        tags:
+          type: array
+          items:
+            type: string
+      required:
+        - url
+        - title
+        - author
+        - fandom
+        - wordCount
+        - tags
+
+    Fic:
+      type: object
+      properties:
+        id:
+          type: string
+        url:
+          type: string
+        title:
+          type: string
+        author:
+          type: string
+        fandom:
+          type: string
+        ship:
+          type: ["string", "null"]
+        wordCount:
+          type: integer
+        tags:
+          type: array
+          items:
+            type: string
+        dateAdded:
+          type: string
+        userRating:
+          type: ["integer", "null"]
+        userNote:
+          type: ["string", "null"]
+      required:
+        - id
+        - url
+        - title
+        - author
+        - fandom
+        - wordCount
+        - tags
+        - dateAdded
+
+    CreateFicBody:
+      type: object
+      properties:
+        url:
+          type: string
+        title:
+          type: string
+        author:
+          type: string
+        fandom:
+          type: string
+        ship:
+          type: ["string", "null"]
+        wordCount:
+          type: integer
+        tags:
+          type: array
+          items:
+            type: string
+        userRating:
+          type: ["integer", "null"]
+        userNote:
+          type: ["string", "null"]
+      required:
+        - url
+        - title
+        - author
+        - fandom
+        - wordCount
+        - tags
+
+    UpdateFicBody:
+      type: object
+      properties:
+        userRating:
+          type: ["integer", "null"]
+        userNote:
+          type: ["string", "null"]
+
+    MonthlyStats:
+      type: object
+      properties:
+        ficCount:
+          type: integer
+        fandomCount:
+          type: integer
+        month:
+          type: string
+      required:
+        - ficCount
+        - fandomCount
+        - month

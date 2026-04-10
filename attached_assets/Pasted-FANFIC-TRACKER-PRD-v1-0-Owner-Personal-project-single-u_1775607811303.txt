@@ -1,0 +1,143 @@
+FANFIC TRACKER — PRD v1.0
+==========================
+Owner: Personal project (single user)
+Target: Working v1 in 4–6 weeks
+
+---
+
+PROBLEM STATEMENT
+-----------------
+AO3 has no read history. After finishing a fic, there is no native
+way to log it, rate it, or know how much you've read over time.
+This tool solves that — and only that.
+
+---
+
+SUCCESS CONDITION
+-----------------
+"I finish a fic, paste the URL, it pulls the metadata, I add a star
+rating and a one-line note, and I can see I've read 23 fics this
+month across 4 fandoms."
+
+---
+
+MVP FEATURES — BUILD THESE, NOTHING ELSE
+-----------------------------------------
+
+1. URL Entry
+   Single input field. Paste an AO3 URL, press enter.
+   That is the entire UI for adding a fic.
+
+2. Metadata Scrape (Phase 1 — Web Scraper)
+   Auto-pull via web scraper: title, author, fandom, ship,
+   word count, tags. Fields are read-only. User cannot edit them.
+
+   Scraper notes for the developer:
+   - AO3 has no public API. Use a server-side scraper (not
+     client-side) to fetch and parse the AO3 HTML.
+   - Target the metadata header elements on the work page.
+   - Run the scraper as a server function (e.g. a Next.js API
+     route or SvelteKit endpoint) so the AO3 request comes from
+     the server, not the user's browser.
+   - AO3 rate-limits aggressively. Add a delay if scraping fails
+     and respect their terms of service.
+   - This will break if AO3 updates their HTML markup. That is
+     acceptable risk for v1. Build it anyway.
+
+3. Star Rating + Note
+   1–5 stars. One plain text field for a personal note.
+   Both are optional. Saved on the same screen as the entry.
+
+4. Fic List View
+   Scrollable list of all logged fics. Sortable by date added.
+   Tap/click any entry to view the full record.
+
+5. Monthly Stats (header only — not a separate page)
+   Two numbers displayed at the top of the list view:
+   - Fics read this month
+   - Fandoms represented this month
+
+6. Cross-Device Sync
+   Data must persist and sync between phone and laptop.
+   Use Supabase free tier with email login.
+   No guest mode in v1.
+
+---
+
+WHAT IS NOT IN V1 — DO NOT BUILD THESE
+----------------------------------------
+- Author watchlist or follow system
+- Full stats dashboard or charts
+- Search or filter on the list view
+- Backlog import or bulk entry
+- Social features, sharing, or export
+- Native mobile app (use browser on phone for v1)
+
+These may be considered for v2, but only after v1 is live
+and being used daily.
+
+---
+
+DATA MODEL
+----------
+One table: fics
+
+Fields:
+- id
+- user_id
+- url
+- title
+- author
+- fandom
+- ship
+- word_count
+- tags (array)
+- date_added
+- user_rating (1–5, nullable)
+- user_note (text, nullable)
+
+---
+
+RECOMMENDED STACK
+-----------------
+- Frontend/Backend: Next.js or SvelteKit
+- Database + Auth: Supabase (free tier)
+- Hosting: Vercel
+- Scraper: Server-side function within the same app
+
+---
+
+PRIMARY RISK
+------------
+Scope creep will kill this before it ships.
+
+Every feature not listed in the MVP section above requires an
+explicit decision to delay v1. If an author page, filter UI,
+or stats graph gets added before the URL-paste flow works
+end-to-end — stop. Ship the boring version first.
+
+---
+
+DEFINITION OF DONE
+-------------------
+v1 is complete when ALL of the following are true:
+
+[ ] Paste an AO3 URL → metadata appears without manual typing
+[ ] Add a star rating and note → saved and visible on next visit
+[ ] Open on phone → same data as on laptop
+[ ] List shows fics-this-month count and fandom count in header
+[ ] Used daily for 2 weeks without wanting to abandon it
+
+---
+
+PHASE PLAN
+----------
+Phase 1 (Now): Web scraper + URL entry + fic list + rating/note
+               + basic monthly stats + Supabase sync
+
+Phase 2 (Later, after daily use confirmed):
+               Author watchlist, filtering, expanded stats
+
+---
+
+END OF PRD v1.0
