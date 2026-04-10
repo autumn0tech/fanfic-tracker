@@ -617,40 +617,25 @@ export default function Home() {
               </div>
             )}
 
-            {/* Favourite authors — only authors with 5+ fics logged */}
-            {authorStats.filter((a) => a.count >= 5).length > 0 && (
+            {/* Favourite authors — only explicitly hearted authors */}
+            {favAuthors.size > 0 && (
               <div className="border-t border-border/30 pt-4">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
                   Favorite Authors
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {authorStats.filter((a) => a.count >= 5).map(({ name, count }) => {
-                    const isFav = favAuthors.has(name);
-                    return (
-                      // Clicking toggles the author's favourite status.
-                      // Filled style = favourited; outline style = not favourited.
-                      <button
-                        key={name}
-                        onClick={() => toggleFav(name)}
-                        title={`${count} fic${count !== 1 ? "s" : ""} logged`}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
-                          isFav
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "bg-background text-foreground border-border/60 hover:border-primary/50 hover:bg-primary/5"
-                        }`}
-                      >
-                        <Heart
-                          className={`w-3.5 h-3.5 shrink-0 ${isFav ? "fill-current" : ""}`}
-                        />
-                        {name}
-                        <span
-                          className={`text-xs ${isFav ? "text-primary-foreground/70" : "text-muted-foreground"}`}
-                        >
-                          {count}
-                        </span>
-                      </button>
-                    );
-                  })}
+                  {[...favAuthors].sort().map((name) => (
+                    // Clicking the chip un-favourites the author.
+                    <button
+                      key={name}
+                      onClick={() => toggleFav(name)}
+                      title="Remove from favorites"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors bg-primary text-primary-foreground border-primary"
+                    >
+                      <Heart className="w-3.5 h-3.5 shrink-0 fill-current" />
+                      {name}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
