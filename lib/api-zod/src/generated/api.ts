@@ -119,6 +119,26 @@ export const DeleteFicParams = zod.object({
 });
 
 /**
+ * @summary List all favourite author names
+ */
+export const ListFavAuthorsResponseItem = zod.string();
+export const ListFavAuthorsResponse = zod.array(ListFavAuthorsResponseItem);
+
+/**
+ * @summary Add an author to favourites
+ */
+export const AddFavAuthorBody = zod.object({
+  author: zod.string(),
+});
+
+/**
+ * @summary Remove an author from favourites
+ */
+export const RemoveFavAuthorParams = zod.object({
+  author: zod.coerce.string(),
+});
+
+/**
  * @summary Get fic count and fandom count for the current month
  */
 export const GetMonthlyStatsResponse = zod.object({
