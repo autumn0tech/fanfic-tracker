@@ -624,18 +624,22 @@ export default function Home() {
                   Favorite Authors
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {[...favAuthors].sort().map((name) => (
-                    // Clicking the chip un-favourites the author.
-                    <button
-                      key={name}
-                      onClick={() => toggleFav(name)}
-                      title="Remove from favorites"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors bg-primary text-primary-foreground border-primary"
-                    >
-                      <Heart className="w-3.5 h-3.5 shrink-0 fill-current" />
-                      {name}
-                    </button>
-                  ))}
+                  {[...favAuthors].sort().map((name) => {
+                    const count = authorStats.find((a) => a.name === name)?.count ?? 0;
+                    return (
+                      // Clicking the chip un-favourites the author.
+                      <button
+                        key={name}
+                        onClick={() => toggleFav(name)}
+                        title="Remove from favorites"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors bg-primary text-primary-foreground border-primary"
+                      >
+                        <Heart className="w-3.5 h-3.5 shrink-0 fill-current" />
+                        {name}
+                        <span className="text-xs text-primary-foreground/70">{count}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
