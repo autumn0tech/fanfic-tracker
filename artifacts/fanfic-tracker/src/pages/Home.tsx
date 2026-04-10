@@ -24,8 +24,12 @@ import {
   useListFics,
   useGetMonthlyStats,
   useCreateFic,
+  useListFavAuthors,
+  useAddFavAuthor,
+  useRemoveFavAuthor,
   getListFicsQueryKey,
   getGetMonthlyStatsQueryKey,
+  getListFavAuthorsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -143,26 +147,82 @@ export default function Home() {
   }, [totalFics]);
 
   // ── Favourite authors ───────────────────────────────────────────────────────
-  // Stored in localStorage so they persist across page reloads without
-  // needing a backend change.  Initialised lazily from localStorage.
-  const [favAuthors, setFavAuthors] = useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem("favAuthors");
-      return new Set(stored ? (JSON.parse(stored) as string[]) : []);
-    } catch {
-      return new Set();
-    }
-  });
+  // Stored in the "FavAuthors" Google Sheets tab so they persist across devices.
+  // A local Set mirrors the server state and is updated optimistically on toggle.
+  const { data: favAuthorsData } = useListFavAuthors();
+  const addFavMutation = useAddFavAuthor();
+  const removeFavMutation = useRemoveFavAuthor();
 
-  /** Toggles the given author in the favourite set and syncs to localStorage. */
+  // Local Set for O(1) membership checks and optimistic UI updates.
+  const [favAuthors, setFavAuthors] = useState<Set<string>>(new Set());
+
+  // Keep local state in sync whenever the server responds.
+  useEffect(() => {
+    if (favAuthorsData) setFavAuthors(new Set(favAuthorsData));
+  }, [favAuthorsData]);
+
+  // One-time migration: if the user had favourites in localStorage, push them
+  // to the API then clear the local key so this only runs once.
+  useEffect(() => {
+    const stored = localStorage.getItem("favAuthors");
+    if (!stored) return;
+    try {
+      const names = JSON.parse(stored) as string[];
+      if (names.length > 0) {
+        Promise.all(
+          names.map((name) => addFavMutation.mutateAsync({ data: { author: name } })),
+        )
+          .then(() => {
+            localStorage.removeItem("favAuthors");
+            queryClient.invalidateQueries({ queryKey: getListFavAuthorsQueryKey() });
+          })
+          .catch(() => {}); // silently fail — will retry next load
+      } else {
+        localStorage.removeItem("favAuthors");
+      }
+    } catch {
+      localStorage.removeItem("favAuthors");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Toggles the given author in favourites with optimistic UI and API sync. */
   function toggleFav(author: string) {
+    const isFav = favAuthors.has(author);
+
+    // Optimistic update
     setFavAuthors((prev) => {
       const next = new Set(prev);
-      if (next.has(author)) next.delete(author);
+      if (isFav) next.delete(author);
       else next.add(author);
-      localStorage.setItem("favAuthors", JSON.stringify([...next]));
       return next;
     });
+
+    if (isFav) {
+      removeFavMutation.mutate(
+        { author },
+        {
+          onError: () =>
+            setFavAuthors((prev) => new Set([...prev, author])), // rollback
+          onSuccess: () =>
+            queryClient.invalidateQueries({ queryKey: getListFavAuthorsQueryKey() }),
+        },
+      );
+    } else {
+      addFavMutation.mutate(
+        { data: { author } },
+        {
+          onError: () =>
+            setFavAuthors((prev) => {
+              const next = new Set(prev);
+              next.delete(author);
+              return next;
+            }), // rollback
+          onSuccess: () =>
+            queryClient.invalidateQueries({ queryKey: getListFavAuthorsQueryKey() }),
+        },
+      );
+    }
   }
 
   // ── Bookmarklet ─────────────────────────────────────────────────────────────
