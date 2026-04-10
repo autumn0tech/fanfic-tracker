@@ -51,7 +51,6 @@ Thumbs.db
 .replit
 .replitignore
 replit.md
-.replit-artifact/
 .cache/
 .local/
 artifacts/mockup-sandbox/
